@@ -16,7 +16,7 @@ function parseInstant(value) {
   if (typeof value !== 'string' || !ISO_WITH_OFFSET.test(value)) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
-
+}
 
 // Разложить момент на московские дату и минуты от полуночи
 function toMoscow(date) {
