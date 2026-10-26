@@ -1,0 +1,30 @@
+# Описание среды для Render (бесплатный тариф): веб-сервис + PostgreSQL.
+# Публикация запускается из GitHub Actions через Deploy Hook (autoDeploy выключен),
+# поэтому при ошибке CI новая версия не выкладывается.
+services:
+  - type: web
+    name: bron-bez-konfliktov
+    runtime: node
+    plan: free
+    region: frankfurt
+    autoDeploy: false
+    buildCommand: npm ci --omit=dev
+    # Сначала миграции (с рекомендательной блокировкой), затем сервер
+    startCommand: npm run release
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1h
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bron-db
+          property: connectionString
+
+databases:
+  - name: bron-db
+    plan: free
+    region: frankfurt

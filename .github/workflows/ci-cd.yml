@@ -1,0 +1,79 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Задача 1: проверка и сборка (CI). Автотесты API не входят — по заданию.
+  ci:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Build (syntax check + dist/)
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bron-build
+          path: dist/
+
+  # Задача 2: публикация (CD). Запускается только после успешного CI и только для main.
+  deploy:
+    name: Deploy
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bron-build
+          path: dist/
+
+      - name: Trigger deploy
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::warning::Секрет DEPLOY_HOOK_URL не задан — публикация пропущена"
+            exit 0
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" > /dev/null
+          echo "Публикация запущена"
+
+      - name: Readiness check
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::warning::Переменная APP_URL не задана — проверка готовности пропущена"
+            exit 0
+          fi
+          sleep 60
+          for i in $(seq 1 20); do
+            if curl -fsS "$APP_URL/health/ready"; then
+              echo; echo "Сервис готов: $APP_URL"; exit 0
+            fi
+            echo "Ожидание готовности ($i/20)..."; sleep 15
+          done
+          echo "::error::Сервис не ответил на /health/ready"; exit 1
